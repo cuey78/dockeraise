@@ -5,15 +5,29 @@ msg="\033[1;32m[+]\033[m"
 info="\033[0;36m[:]\033[m"
 ask="\033[0;35m[?]\033[m"
 
-# Check if the machine is running a Debian-based system
-is_debian() {
+# Function to check the Linux distribution
+detect_distro() {
     if [ -f /etc/os-release ]; then
         . /etc/os-release
-        if [[ "$ID" == "debian" || "$ID_LIKE" =~ "debian" ]]; then
-            return 0
-        fi
+        case "$ID" in
+            debian|ubuntu)
+                DISTRO="debian"
+                ;;
+            fedora)
+                DISTRO="fedora"
+                ;;
+            arch)
+                DISTRO="arch"
+                ;;
+            *)
+                echo -e "${err} Unsupported distribution: $ID"
+                exit 1
+                ;;
+        esac
+    else
+        echo -e "${err} Cannot detect the distribution."
+        exit 1
     fi
-    return 1
 }
 
 # Check if Docker is installed
@@ -36,52 +50,109 @@ check_root() {
 # Remove old and incompatible packages
 remove_old_packages() {
     echo -e "${info} Removing old and incompatible packages..."
-    for pkg in docker.io docker-doc docker-compose podman-docker containerd runc; do
-        apt-get remove -y $pkg >/dev/null
-    done
+    case "$DISTRO" in
+        debian)
+            for pkg in docker.io docker-doc docker-compose podman-docker containerd runc; do
+                apt-get remove -y $pkg >/dev/null
+            done
+            ;;
+        fedora)
+            for pkg in docker docker-client docker-client-latest docker-common docker-latest docker-latest-logrotate docker-logrotate docker-selinux docker-engine-selinux docker-engine; do
+                dnf remove -y $pkg >/dev/null
+            done
+            ;;
+        arch)
+            for pkg in docker docker-compose containerd runc; do
+                pacman -Rns --noconfirm $pkg >/dev/null
+            done
+            ;;
+    esac
 }
 
 # Install dependencies
 install_dependencies() {
-    echo -e "${info} Updating repositories..."
-    apt-get update >/dev/null
     echo -e "${info} Installing dependencies..."
-    apt-get install -y ca-certificates curl gnupg >/dev/null
+    case "$DISTRO" in
+        debian)
+            apt-get update >/dev/null
+            apt-get install -y ca-certificates curl gnupg lsb-release >/dev/null
+            ;;
+        fedora)
+            dnf install -y dnf-plugins-core >/dev/null
+            ;;
+        arch)
+            pacman -Sy --noconfirm ca-certificates curl gnupg lsb-release >/dev/null
+            ;;
+    esac
 }
 
-# Add Docker GPG key
-add_gpg_key() {
-    install -m 0755 -d /etc/apt/keyrings
-    if curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor --yes -o /etc/apt/keyrings/docker.gpg; then
-        chmod a+r /etc/apt/keyrings/docker.gpg
-        echo -e "${msg} Added Docker's GPG key"
-    else
-        echo -e "${err} Failed to add Docker's GPG key"
-        exit 1
-    fi
-}
+# Add Docker GPG key and repository
+setup_docker_repo() {
+    case "$DISTRO" in
+        debian)
+            install -m 0755 -d /etc/apt/keyrings
+            if curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor --yes -o /etc/apt/keyrings/docker.gpg; then
+                chmod a+r /etc/apt/keyrings/docker.gpg
+                echo -e "${msg} Added Docker's GPG key"
+            else
+                echo -e "${err} Failed to add Docker's GPG key"
+                exit 1
+            fi
 
-# Add Docker repository
-add_repository() {
-    if echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null; then
-        echo -e "${msg} Added Docker's stable repository"
-    else
-        echo -e "${err} Failed to add Docker's stable repository"
-        exit 1
-    fi
+            if echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null; then
+                echo -e "${msg} Added Docker's stable repository"
+            else
+                echo -e "${err} Failed to add Docker's stable repository"
+                exit 1
+            fi
+
+            apt-get update >/dev/null
+            ;;
+        fedora)
+            if dnf config-manager --add-repo https://download.docker.com/linux/fedora/docker-ce.repo; then
+                echo -e "${msg} Added Docker's repository"
+            else
+                echo -e "${err} Failed to add Docker's repository"
+                exit 1
+            fi
+
+            dnf makecache >/dev/null
+            ;;
+        arch)
+            pacman -Sy --noconfirm >/dev/null
+            ;;
+    esac
 }
 
 # Install Docker
 install_docker() {
-    echo -e "${info} Updating repositories..."
-    apt-get update >/dev/null
     echo -e "${info} Installing Docker and Docker compose (this might take a while)..."
-    if apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin >/dev/null; then
-        echo -e "${msg} Docker successfully installed: \033[0;32m$(docker --version)\033[m"
-    else
-        echo -e "${err} Docker installation failed"
-        exit 1
-    fi
+    case "$DISTRO" in
+        debian)
+            if apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin >/dev/null; then
+                echo -e "${msg} Docker successfully installed: \033[0;32m$(docker --version)\033[m"
+            else
+                echo -e "${err} Docker installation failed"
+                exit 1
+            fi
+            ;;
+        fedora)
+            if dnf install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin >/dev/null; then
+                echo -e "${msg} Docker successfully installed: \033[0;32m$(docker --version)\033[m"
+            else
+                echo -e "${err} Docker installation failed"
+                exit 1
+            fi
+            ;;
+        arch)
+            if pacman -S --noconfirm docker docker-compose containerd runc; then
+                echo -e "${msg} Docker successfully installed: \033[0;32m$(docker --version)\033[m"
+            else
+                echo -e "${err} Docker installation failed"
+                exit 1
+            fi
+            ;;
+    esac
 }
 
 # Create Docker user
@@ -126,6 +197,7 @@ enable_docker_service() {
 
 main() {
     check_root
+    detect_distro
 
     if is_docker_installed; then
         while true; do
@@ -139,15 +211,9 @@ main() {
         done
     fi
 
-    if ! is_debian; then
-        echo -e "${err} This script only works on Debian machines, sorry!"
-        exit 1
-    fi
-
     remove_old_packages
     install_dependencies
-    add_gpg_key
-    add_repository
+    setup_docker_repo
     install_docker
     create_docker_user
     enable_docker_service
