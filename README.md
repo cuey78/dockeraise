@@ -1,12 +1,42 @@
-# Dockeraise
-Raise a full Docker installation in your server with ease!
+## Dockeraise v2
 
-Simple bash script to automate the installation of Docker (and Docker compose) on servers running Debian. 
-It also lets you create a Docker user.
+Dockeraise simplifies Docker installation on your server!
 
-> Should work on both Debian 11 and 12. Only tested on fresh Debian 12 installations. Reviewing the code is recommended.
+This project is a fork of an original script, now modularized with added support for Debian, Fedora, and Arch-based systems.
 
-```
+**Tested Environments:** Fedora 40 and Debian.
+
+> **Note:** Reviewing the code before execution is highly recommended.
+
+### Quick Installation
+
+To install Docker using Dockeraise, run the following command:
+
+```bash
 wget -qO- https://raw.githubusercontent.com/cuey78/dockeraise/main/dockeraise.sh | sudo bash
-
 ```
+
+### Features
+
+- Easy Docker installation for various Linux distributions.
+- Modular design for easy customization and maintenance.
+- Supports Debian, Fedora, and Arch-based systems out of the box.
+
+### Usage
+
+1. Ensure your server meets the prerequisites.
+2. Run the installation command provided above.
+3. Follow any prompts or instructions during the installation process.
+
+### Contribution
+
+Contributions and feedback are welcome! Feel free to fork and submit pull requests.
+
+### License
+
+This project is licensed under the [MIT License](LICENSE).
+
+---
+
+For detailed information and updates, visit the [GitHub repository](https://github.com/cuey78/dockeraise).
+
